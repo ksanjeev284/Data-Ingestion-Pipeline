@@ -1,0 +1,55 @@
+/* style.css */
+
+/* Apply a background color to the entire page */
+body {
+    background-color: #f7f7f7;
+    font-family: Arial, sans-serif;
+}
+
+/* Style the header */
+h1 {
+    text-align: center;
+    margin-top: 20px;
+    color: #333;
+}
+
+/* Style the table */
+.weather-table {
+    width: 80%;
+    margin: 20px auto;
+    border-collapse: collapse;
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Style table headers */
+.weather-table th {
+    background-color: #009688;
+    color: white;
+    padding: 12px;
+    text-align: left;
+}
+
+/* Style table cells */
+.weather-table td {
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+}
+
+/* Add alternating background color to rows */
+.weather-table tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+/* Add hover effect on table rows */
+.weather-table tr:hover {
+    background-color: #e0f2f1;
+}
+
+/* Style the footer */
+footer {
+    text-align: center;
+    margin-top: 20px;
+    color: #777;
+}
