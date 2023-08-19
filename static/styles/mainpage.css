@@ -1,9 +1,9 @@
-/* style.css */
-
 /* Apply a background color to the entire page */
 body {
     background-color: #f7f7f7;
     font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
 }
 
 /* Style the header */
@@ -52,4 +52,13 @@ footer {
     text-align: center;
     margin-top: 20px;
     color: #777;
+    padding: 10px;
+    background-color: #f7f7f7;
+    border-top: 1px solid #ddd;
+}
+
+/* Additional styling for the live graph */
+#weatherGraph {
+    max-width: 100%;
+    margin-top: 20px;
 }

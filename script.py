@@ -1,84 +1,116 @@
+import os
 import webbrowser
 import requests
-import mysql.connector
-from datetime import date
+import threading
 import time
-from flask import Flask, render_template
-import pymysql
+from datetime import date
+from flask import Flask, render_template, request
+from flask_socketio import SocketIO
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+
 
 app = Flask(__name__)
 app.template_folder = 'templates'
+socketio = SocketIO(app)
 
-def fetch_weather_data():
-    while True:
-        # API endpoint and parameters
-        API_KEY = '3ce109e5535b3bb9f44a2de1aa849ea1'
-        CITY = 'Hyderabad'
-        URL = f'http://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={API_KEY}'
+API_KEY = '3ce109e5535b3bb9f44a2de1aa849ea1'
+CITY = 'Hyderabad'
+URL = f'http://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={API_KEY}'
+DATABASE_URL = 'mysql+pymysql://root:root@localhost/weather_app'
 
-        # Fetch weather data from the API
-        response = requests.get(URL)
-        weather_data = response.json()
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
 
-        # Extract relevant data from the response
+class WeatherFetcher(threading.Thread):
+    def __init__(self, stop_event, session):
+        super().__init__()
+        self.stop_event = stop_event
+        self.session = session
+
+    def run(self):
+        while not self.stop_event.is_set():
+            try:
+                response = requests.get(URL)
+                response.raise_for_status()
+
+                weather_data = response.json()
+                self.insert_weather_data(weather_data)
+
+                print("Weather data inserted successfully.")
+                print(weather_data)
+
+                # Emit the new weather data to connected clients
+                socketio.emit('new_weather_data', weather_data)
+
+            except requests.exceptions.RequestException as req_exc:
+                print("Request Exception:", req_exc)
+            except Exception as error:
+                print("Error:", error)
+
+            time.sleep(300)
+
+    def insert_weather_data(self, weather_data):
         temperature = weather_data['main']['temp']
         humidity = weather_data['main']['humidity']
         description = weather_data['weather'][0]['description']
 
-        # Connect to the MySQL database
-        db_connection = mysql.connector.connect(
-            host='localhost',
-            user='root',
-            password='root',
-            database='weather_app'
-        )
-
-        # Create a cursor object to execute SQL queries
-        cursor = db_connection.cursor()
-
-        # Insert weather data into the database
-        insert_query = "INSERT INTO weather_forecast (date, temperature, humidity, description) VALUES (%s, %s, %s, %s)"
         current_date = date.today()
-        weather_values = (current_date, temperature, humidity, description)
-
-        cursor.execute(insert_query, weather_values)
-        db_connection.commit()
-
-        # Close the cursor and the database connection
-        cursor.close()
-        db_connection.close()
-
-        print("Weather data inserted successfully.")
-        print(weather_data)
-
-        # Wait for 5 minutes before fetching data again
-        time.sleep(300)  # 5 minutes in seconds
-
-# Define the Flask route and function to serve the data
-def get_db_connection():
-    return pymysql.connect(
-        host='localhost',
-        user='root',
-        password='root',
-        database='weather_app',
-        charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor
-    )
+        insert_query = text("INSERT INTO weather_forecast (date, temperature, humidity, description) VALUES (:date, :temperature, :humidity, :description)")
+        self.session.execute(
+            insert_query,
+            {"date": current_date, "temperature": temperature, "humidity": humidity, "description": description}
+        )
+        self.session.commit()
 
 @app.route('/')
 def index():
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.execute("SELECT * FROM weather_forecast")
-    data = cursor.fetchall()
-    connection.close()
-    return render_template('index.html', data=data)
+    try:
+        with Session() as session:
+            select_query = text("SELECT * FROM weather_forecast")
+            data = session.execute(select_query).fetchall()
+            return render_template('index.html', data=data)
+    except Exception as error:
+        print("Error:", error)
+        return "An error occurred."
+
+@app.route('/get_weather_data')
+def get_weather_data():
+    try:
+        response = requests.get(URL)
+        response.raise_for_status()
+        weather_data = response.json()
+        socketio.emit('new_weather_data', weather_data)  # Emit the new data to connected clients
+        return "Weather data fetched and sent to clients."
+    except requests.exceptions.RequestException as req_exc:
+        return "Request Exception: " + str(req_exc)
+    except Exception as error:
+        return "Error: " + str(error)
 
 if __name__ == '__main__':
-    app.debug = True
-    # Start a new thread to fetch weather data every 5 minutes
-    import threading
-    threading.Thread(target=fetch_weather_data).start()
-    webbrowser.open('http://127.0.0.1:5000/')
-    app.run()
+    stop_event = threading.Event()
+    session = Session()
+    weather_fetcher = WeatherFetcher(stop_event, session)
+    
+    app.debug = False
 
+    @socketio.on('connect')
+    def handle_connect():
+        print("Client connected")
+
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        print("Client disconnected")
+
+    app_thread = threading.Thread(target=socketio.run, args=(app, '0.0.0.0', 5000))
+    app_thread.start()
+
+    webbrowser.open('http://127.0.0.1:5000/')
+
+    try:
+        weather_fetcher.start()
+        app_thread.join()
+    except KeyboardInterrupt:
+        stop_event.set()
+        weather_fetcher.join()
+        print("Thread stopped gracefully.")
