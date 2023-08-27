@@ -3,7 +3,7 @@ import mysql.connector
 from datetime import date
 
 # API endpoint and parameters
-API_KEY = '3ce109e5535b3bb9f44a2de1aa849ea1'
+API_KEY = ''
 CITY = 'Hyderabad'
 URL = f'http://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={API_KEY}'
 
